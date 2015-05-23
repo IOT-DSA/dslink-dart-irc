@@ -246,6 +246,7 @@ class ClientNode extends SimpleNode {
           r"$result": "values"
         },
         "Send_Message": {
+          r"$name": "Send Message",
           r"$is": "sendChannelMessage",
           r"$invokable": "write",
           r"$result": "values",
