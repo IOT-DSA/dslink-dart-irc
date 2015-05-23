@@ -5,3 +5,5 @@ dependencies:
     git: https://github.com/IOT-DSA/sdk-dslink-dart.git
   irc:
     git: https://github.com/DirectMyFile/irc.dart.git
+dependency_overrides:
+  event_dispatcher: 1.1.0
