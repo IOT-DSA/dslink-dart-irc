@@ -91,6 +91,16 @@ main(List<String> args) async {
               "default": "Bot Disconnecting"
             }
           ]
+        },
+        "Join": {
+          r"$is": "joinChannel",
+          r"$invokable": "write",
+          r"$params": [
+            {
+              "name": "channel",
+              "type": "string"
+            }
+          ]
         }
       });
 
@@ -125,6 +135,12 @@ main(List<String> args) async {
       ClientNode node = getClientNode(path);
       node.client.sendMessage(getChannelNodeName(path), params["message"] == null ? "" : params["message"]);
       return {};
+    }),
+    "joinChannel": (String path) => new SimpleActionNode(path, (Map<String, dynamic> params) {
+      var channel = params["channel"];
+      if (!channel.startsWith("#")) "#${channel}";
+      ClientNode node = getClientNode(path);
+      node.client.join(channel);
     })
   }, encodePrettyJson: true, autoInitialize: false);
 
@@ -256,12 +272,35 @@ class ClientNode extends SimpleNode {
               "type": "string"
             }
           ]
-        }
+        },
+        "Last_Message": {
+          r"$name": "Last Message",
+          "User": {
+            r"$type": "string"
+          },
+          "Message": {
+            r"$type": "string"
+          },
+          "ID": {
+            r"$type": "number",
+            "?value": 0
+          }
+        },
+        "Users": {}
       });
       await new Future.delayed(new Duration(seconds: 1));
       for (var user in event.channel.allUsers) {
         await addUserToChannel(client, channel, user);
       }
+    });
+
+    bot.onMessage.listen((MessageEvent event) {
+      if (event.isPrivate) return;
+
+      String channel = getChannelName(event.channel.name);
+      val("/Channels/${channel}/Last_Message/User", event.from);
+      val("/Channels/${channel}/Last_Message/Message", event.message);
+      val("/Channels/${channel}/Last_Message/ID", (link["/${server}/Channels/${channel}/Last_Message/ID"].lastValueUpdate.value as int) + 1);
     });
 
     bot.onBotPart.listen((event) {
@@ -279,7 +318,7 @@ class ClientNode extends SimpleNode {
     bot.onPart.listen((event) {
       String channel = getChannelName(event.channel.name);
       String user = event.user;
-      rm("/Channels/${channel}/${user}");
+      rm("/Channels/${channel}/Users/${user}");
     });
 
     bot.onKick.listen((event) {
@@ -314,7 +353,7 @@ class ClientNode extends SimpleNode {
 
 addUserToChannel(DSAClient client, String channel, String user) async {
   WhoisEvent whois = await client.whois(user);
-  link.addNode("/${client.serverName}/Channels/${channel}/${user}", {
+  link.addNode("/${client.serverName}/Channels/${channel}/Users/${user}", {
     "Username": {
       r"$type": "string",
       "?value": whois.username
