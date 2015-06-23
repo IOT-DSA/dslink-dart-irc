@@ -39,8 +39,8 @@ main(List<String> args) async {
         },
         {
           "name": "channels",
-          "type": "array",
-          "default": []
+          "type": "string",
+          "default": ""
         }
       ],
       r"$columns": [
@@ -76,32 +76,7 @@ main(List<String> args) async {
         r"$irc_port": port,
         r"$irc_nickname": nickname,
         r"$irc_username": username,
-        r"$irc_channels": channels.join(","),
-        "Connect": {
-          r"$is": "connect",
-          r"$invokable": "write"
-        },
-        "Disconnect": {
-          r"$is": "disconnect",
-          r"$invokable": "write",
-          r"$params": [
-            {
-              "name": "reason",
-              "type": "string",
-              "default": "Bot Disconnecting"
-            }
-          ]
-        },
-        "Join": {
-          r"$is": "joinChannel",
-          r"$invokable": "write",
-          r"$params": [
-            {
-              "name": "channel",
-              "type": "string"
-            }
-          ]
-        }
+        r"$irc_channels": channels
       });
 
       link.save();
@@ -164,17 +139,12 @@ class ClientNode extends SimpleNode {
 
   @override
   void onCreated() {
-    init();
-
-    if (!children.containsKey("Connect")) {
-      put("/Connect", {
+    var m = {
+      "Connect": {
         r"$is": "connect",
         r"$invokable": "write"
-      });
-    }
-
-    if (!children.containsKey("Disconnect")) {
-      put("/Disconnect", {
+      },
+      "Disconnect": {
         r"$is": "disconnect",
         r"$invokable": "write",
         r"$params": [
@@ -184,8 +154,25 @@ class ClientNode extends SimpleNode {
             "default": "Bot Disconnecting"
           }
         ]
-      });
+      },
+      "Join": {
+        r"$is": "joinChannel",
+        r"$invokable": "write",
+        r"$params": [
+          {
+            "name": "channel",
+            "type": "string"
+          }
+        ]
+      }
+    };
+
+    for (var k in m.keys) {
+      link.removeNode("/${server}/${k}");
+      link.addNode("/${server}/${k}", m[k]);
     }
+
+    init();
   }
 
   bool _initialized = false;
@@ -282,13 +269,14 @@ class ClientNode extends SimpleNode {
             r"$type": "string"
           },
           "ID": {
-            r"$type": "number",
+            r"$type": "int",
             "?value": 0
           }
         },
         "Users": {}
       });
-      await new Future.delayed(new Duration(seconds: 1));
+      client.refreshUserList(event.channel.name);
+      await new Future.delayed(new Duration(seconds: 4));
       for (var user in event.channel.allUsers) {
         await addUserToChannel(client, channel, user);
       }
@@ -298,9 +286,10 @@ class ClientNode extends SimpleNode {
       if (event.isPrivate) return;
 
       String channel = getChannelName(event.channel.name);
+      int id = (link["/${server}/Channels/${channel}/Last_Message/ID"].lastValueUpdate.value as int) + 1;
       val("/Channels/${channel}/Last_Message/User", event.from);
       val("/Channels/${channel}/Last_Message/Message", event.message);
-      val("/Channels/${channel}/Last_Message/ID", (link["/${server}/Channels/${channel}/Last_Message/ID"].lastValueUpdate.value as int) + 1);
+      val("/Channels/${channel}/Last_Message/ID", id);
     });
 
     bot.onBotPart.listen((event) {
