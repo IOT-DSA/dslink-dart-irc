@@ -225,6 +225,10 @@ class ClientNode extends SimpleNode {
 
     DSAClient bot = client = new DSAClient(new Path(path).name, config);
 
+    bot.onLineReceive.listen((LineReceiveEvent event) {
+      print(">> ${event.line}");
+    });
+
     bot.onConnect.listen((ConnectEvent event) {
       val("/Connected", true);
     });
