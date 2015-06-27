@@ -113,7 +113,7 @@ main(List<String> args) async {
     }),
     "joinChannel": (String path) => new SimpleActionNode(path, (Map<String, dynamic> params) {
       var channel = params["channel"];
-      if (!channel.startsWith("#")) "#${channel}";
+      if (!channel.startsWith("#")) channel = "#${channel}";
       ClientNode node = getClientNode(path);
       node.client.join(channel);
     })
@@ -209,7 +209,7 @@ class ClientNode extends SimpleNode {
 
     _initialized = true;
 
-    var node = link.getNode(path);
+    var node = this;
 
     var config = new Configuration(
         host: node.get(r"$irc_host"),
@@ -232,11 +232,18 @@ class ClientNode extends SimpleNode {
     bot.onReady.listen((event) {
       val("/Ready", true);
 
+      var nickservUsername = node.get(r"$irc_nickserv_username");
+      var nickservPassword = node.get(r"$irc_nickserv_password");
+
+      if (nickservUsername != null && nickservPassword != null) {
+        bot.sendMessage("NickServ", "identify ${nickservUsername} ${nickservPassword}");
+      }
+
       for (var channel in defaultChannels) {
         if (!channel.startsWith("#")) {
           channel = "#${channel}";
         }
-        event.join(channel);
+        bot.join(channel);
       }
     });
 
@@ -281,8 +288,6 @@ class ClientNode extends SimpleNode {
         },
         "Users": {}
       });
-      client.refreshUserList(event.channel.name);
-      await new Future.delayed(new Duration(seconds: 4));
       for (var user in event.channel.allUsers) {
         await addUserToChannel(client, channel, user);
       }
