@@ -135,6 +135,12 @@ class ClientNode extends SimpleNode {
 
   ClientNode(String path) : super(path) {
     myPath = new Path(path);
+
+    new Future.delayed(new Duration(seconds: 5), () {
+      if (client == null) {
+        onCreated();
+      }
+    });
   }
 
   @override
@@ -333,7 +339,7 @@ class ClientNode extends SimpleNode {
 
     for (var m in children.keys) {
       if (m == "Channels") continue;
-      map[m] = children[m];
+      map[m] = (children[m] as SimpleNode).save();
     }
 
     return map;
