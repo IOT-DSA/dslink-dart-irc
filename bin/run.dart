@@ -229,6 +229,10 @@ class ClientNode extends SimpleNode {
       print(">> ${event.line}");
     });
 
+    bot.onEvent(NickInUseEvent).listen((NickInUseEvent event) {
+      event.client.changeNickname(event.original + "_");
+    });
+
     bot.onConnect.listen((ConnectEvent event) {
       val("/Connected", true);
     });
