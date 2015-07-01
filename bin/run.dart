@@ -356,6 +356,7 @@ class ClientNode extends SimpleNode {
 }
 
 addUserToChannel(DSAClient client, String channel, String user) async {
+  await new Future.delayed(new Duration(seconds: 1));
   WhoisEvent whois = await client.whois(user);
   link.addNode("/${client.serverName}/Channels/${channel}/Users/${user}", {
     "Username": {
