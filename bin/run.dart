@@ -86,7 +86,7 @@ main(List<String> args) async {
         "message": "Success!"
       };
     }),
-    "client": (String path) => new ClientNode(path),
+    "client": (String path) => new ClientNode(path, link.provider),
     "leaveChannel": (String path) => new SimpleActionNode(path, (Map<String, dynamic> params) {
       ClientNode node = getClientNode(path);
       node.client.part(getChannelNodeName(path));
@@ -133,7 +133,7 @@ class ClientNode extends SimpleNode {
 
   String get server => myPath.name;
 
-  ClientNode(String path) : super(path) {
+  ClientNode(String path, SimpleNodeProvider provider) : super(path, provider) {
     myPath = new Path(path);
 
     new Future.delayed(new Duration(seconds: 5), () {
