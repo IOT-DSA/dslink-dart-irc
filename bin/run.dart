@@ -312,6 +312,7 @@ class ClientNode extends SimpleNode {
       val("/Channels/${channel}/Last_Message/User", event.from);
       val("/Channels/${channel}/Last_Message/Message", event.message);
       val("/Channels/${channel}/Last_Message/Data", {
+        "id": id,
         "user": event.from,
         "message": event.message
       });
