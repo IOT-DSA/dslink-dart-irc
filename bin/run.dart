@@ -289,6 +289,9 @@ class ClientNode extends SimpleNode {
           "Message": {
             r"$type": "string"
           },
+          "Data": {
+            r"$type": "map"
+          },
           "ID": {
             r"$type": "int",
             "?value": 0
@@ -308,6 +311,10 @@ class ClientNode extends SimpleNode {
       int id = (link["/${server}/Channels/${channel}/Last_Message/ID"].lastValueUpdate.value as int) + 1;
       val("/Channels/${channel}/Last_Message/User", event.from);
       val("/Channels/${channel}/Last_Message/Message", event.message);
+      val("/Channels/${channel}/Last_Message/Data", {
+        "user": event.from,
+        "message": event.message
+      });
       val("/Channels/${channel}/Last_Message/ID", id);
     });
 
