@@ -3,4 +3,4 @@ description: IRC DSLink
 dependencies:
   dslink:
     git: https://github.com/IOT-DSA/sdk-dslink-dart.git
-  irc: "^2.1.8"
+  irc: "^3.0.1"

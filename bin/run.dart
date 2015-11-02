@@ -5,6 +5,8 @@ import "package:dslink/nodes.dart";
 
 import "package:irc/client.dart";
 
+import "package:dslink/utils.dart" show logger;
+
 LinkProvider link;
 
 main(List<String> args) async {
@@ -41,6 +43,18 @@ main(List<String> args) async {
           "name": "channels",
           "type": "string",
           "default": ""
+        },
+        {
+          "name": "serverPassword",
+          "type": "string"
+        },
+        {
+          "name": "nickservUsername",
+          "type": "string"
+        },
+        {
+          "name": "nickservPassword",
+          "type": "string"
         }
       ],
       r"$columns": [
@@ -62,6 +76,9 @@ main(List<String> args) async {
       var nickname = params["nickname"];
       var username = params["username"];
       var channels = params["channels"];
+      var serverPassword = params["serverPassword"];
+      var nickservUsername = params["nickservUsername"];
+      var nickservPassword = params["nickservPassword"];
 
       if (name == null || host == null || port == null || nickname == null || username == null || channels == null) {
         return {
@@ -70,13 +87,28 @@ main(List<String> args) async {
         };
       }
 
+      if (serverPassword is String && serverPassword.isEmpty) {
+        serverPassword = null;
+      }
+
+      if (nickservUsername is String && nickservUsername.isEmpty) {
+        nickservUsername = null;
+      }
+
+      if (nickservPassword is String && nickservPassword.isEmpty) {
+        nickservPassword = null;
+      }
+
       link.addNode("/${name}", {
         r"$is": "client",
         r"$irc_host": host,
         r"$irc_port": port,
         r"$irc_nickname": nickname,
         r"$irc_username": username,
-        r"$irc_channels": channels
+        r"$irc_channels": channels,
+        r"$$irc_password": serverPassword,
+        r"$irc_nickserv_username": nickservUsername,
+        r"$$irc_nickserv_password": nickservPassword
       });
 
       link.save();
@@ -215,8 +247,13 @@ class ClientNode extends SimpleNode {
         host: node.get(r"$irc_host"),
         port: node.get(r"$irc_port"),
         nickname: node.get(r"$irc_nickname"),
-        username: node.get(r"$irc_username")
+        username: node.get(r"$irc_username"),
+        password: node.get(r"$$irc_password")
     );
+
+    if (config.password is String && config.password.isEmpty) {
+      config.password = null;
+    }
 
     List<String> defaultChannels = [];
     if (node.getConfig(r"$irc_channels") != null) {
@@ -226,7 +263,11 @@ class ClientNode extends SimpleNode {
     DSAClient bot = client = new DSAClient(new Path(path).name, config);
 
     bot.onLineReceive.listen((LineReceiveEvent event) {
-      print(">> ${event.line}");
+      logger.fine(">> ${event.line}");
+    });
+
+    bot.onLineSent.listen((LineSentEvent event) {
+      logger.fine("<< ${event.line}");
     });
 
     bot.onEvent(NickInUseEvent).listen((NickInUseEvent event) {
@@ -241,7 +282,11 @@ class ClientNode extends SimpleNode {
       val("/Ready", true);
 
       var nickservUsername = node.get(r"$irc_nickserv_username");
-      var nickservPassword = node.get(r"$irc_nickserv_password");
+      var nickservPassword = node.get(r"$$irc_nickserv_password");
+
+      if (nickservPassword == null) {
+        nickservPassword = node.get(r"$irc_nickserv_password");
+      }
 
       if (nickservUsername != null && nickservPassword != null) {
         bot.sendMessage("NickServ", "identify ${nickservUsername} ${nickservPassword}");
@@ -261,7 +306,7 @@ class ClientNode extends SimpleNode {
       rmc("/Channels");
     });
 
-    bot.onBotJoin.listen((event) async {
+    bot.onClientJoin.listen((ClientJoinEvent event) async {
       String channel = getChannelName(event.channel.name);
       put("/Channels/${channel}", {
         "Leave": {
@@ -299,27 +344,32 @@ class ClientNode extends SimpleNode {
         },
         "Users": {}
       });
+
+      await new Future.delayed(const Duration(milliseconds: 1500));
+
       for (var user in event.channel.allUsers) {
-        await addUserToChannel(client, channel, user);
+        await addUserToChannel(client, channel, user.name);
       }
     });
 
     bot.onMessage.listen((MessageEvent event) {
       if (event.isPrivate) return;
 
-      String channel = getChannelName(event.channel.name);
-      int id = (link["/${server}/Channels/${channel}/Last_Message/ID"].lastValueUpdate.value as int) + 1;
-      val("/Channels/${channel}/Last_Message/User", event.from);
-      val("/Channels/${channel}/Last_Message/Message", event.message);
-      val("/Channels/${channel}/Last_Message/Data", {
-        "id": id,
-        "user": event.from,
-        "message": event.message
-      });
-      val("/Channels/${channel}/Last_Message/ID", id);
+      String channel = getChannelName(event.target.name);
+      if (link["/${server}/Channels/${channel}"] != null) {
+        int id = (link["/${server}/Channels/${channel}/Last_Message/ID"].value as int) + 1;
+        val("/Channels/${channel}/Last_Message/User", new ValueUpdate(event.from.name));
+        val("/Channels/${channel}/Last_Message/Message", new ValueUpdate(event.message));
+        val("/Channels/${channel}/Last_Message/Data", {
+          "id": id,
+          "user": event.from.name,
+          "message": event.message
+        });
+        val("/Channels/${channel}/Last_Message/ID", id);
+      }
     });
 
-    bot.onBotPart.listen((event) {
+    bot.onClientPart.listen((event) {
       String channel = getChannelName(event.channel.name);
       rm("/Channels/${channel}");
     });
@@ -333,7 +383,7 @@ class ClientNode extends SimpleNode {
 
     bot.onPart.listen((event) {
       String channel = getChannelName(event.channel.name);
-      String user = event.user;
+      String user = getUserName(event.user);
       rm("/Channels/${channel}/Users/${user}");
     });
 
@@ -353,7 +403,7 @@ class ClientNode extends SimpleNode {
     };
 
     for (var c in configs.keys) {
-      if (c.startsWith(r"$irc_")) {
+      if (c.startsWith(r"$irc_") || c.startsWith(r"$$irc_")) {
         map[c] = configs[c];
       }
     }
@@ -369,13 +419,16 @@ class ClientNode extends SimpleNode {
 
 addUserToChannel(DSAClient client, String channel, String user) async {
   try {
-    link.addNode("/${client.serverName}/Channels/${channel}/Users/${user}", {
+    String id = getUserName(user);
+    link.addNode("/${client.serverName}/Channels/${channel}/Users/${id}", {
+      r"$name": user
     });
   } catch (e) {
   }
 }
 
-String getChannelName(String input) => input.substring(1);
+String getUserName(String input) => input.replaceAll("[", "%5b").replaceAll("]", "%5d");
+String getChannelName(String input) => input.startsWith("#") ? input.substring(1) : input;
 
 class DSAClient extends Client {
   String serverName;
@@ -388,4 +441,3 @@ class DSAClient extends Client {
 
   Stream<KickEvent> get onKick => onEvent(KickEvent);
 }
-
